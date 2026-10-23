@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -33,6 +34,16 @@ class MainActivity : AppCompatActivity() {
     private val pickFile = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         fileCallback?.onReceiveValue(if (uri != null) arrayOf(uri) else null)
         fileCallback = null
+    }
+
+    /** The phone's own ringtone list (Settings → Ringtone → From phone). */
+    private val pickRingtone = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        @Suppress("DEPRECATION")
+        val uri: Uri? = res.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+        val ev = org.json.JSONObject().put("type", "ringPicked")
+        if (res.resultCode == RESULT_OK && uri != null) ev.put("uri", uri.toString()).put("title", RingtonePlayer.titleOf(uri))
+        else ev.put("uri", "")
+        web.evaluateJavascript("window.__native && window.__native($ev)", null)
     }
 
     private val askPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -153,6 +164,26 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface fun register(json: String) = SipManager.register(json)
         @JavascriptInterface fun unregister() = SipManager.unregister()
         @JavascriptInterface fun call(target: String): String = SipManager.call(target)
+        @JavascriptInterface fun callVia(target: String, via: String): String = SipManager.call(target, via)
+        @JavascriptInterface fun registerOut(json: String) = SipManager.registerOut(json)
+        @JavascriptInterface fun unregisterOut() = SipManager.unregisterOut()
+        @JavascriptInterface fun setRingtone(json: String) = RingtonePlayer.setChoice(json)
+        @JavascriptInterface fun previewRingtone(id: String, uri: String) = RingtonePlayer.preview(id, uri)
+        @JavascriptInterface fun stopRingPreview() = RingtonePlayer.stopPreview()
+        @JavascriptInterface fun saveCustomRingtone(b64: String): Boolean = RingtonePlayer.saveCustom(b64)
+        @JavascriptInterface fun pickSystemRingtone(current: String) {
+            runOnUiThread {
+                try {
+                    val i = android.content.Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_RINGTONE)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Ringtone")
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                        .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+                    if (current.isNotEmpty()) i.putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(current))
+                    pickRingtone.launch(i)
+                } catch (e: Exception) {}
+            }
+        }
         @JavascriptInterface fun answer(id: String) = SipManager.answer(id)
         @JavascriptInterface fun decline(id: String) = SipManager.decline(id)
         @JavascriptInterface fun hangup(id: String) = SipManager.hangup(id)

@@ -12,6 +12,12 @@ What's in version 2:
 - In-app update check (GitHub Releases).
 - Fixed: un-register now really signs the phone out of the PBX, and registrations expire after 2 minutes.
 
+What's new in 2.x (this update):
+- Keypad numbers sit in the middle of the screen.
+- Incoming/outgoing call screen shows the caller's area code, state, main city, main ZIP and their local time (live clock). Works offline (`assets/www/areacodes.js`).
+- Ringtone picker in Settings → Calls → Ringtone (7 built-in tones, the phone's own ringtones, or your own audio file) and a "Vibrate when ringing" switch. The ringtone now plays on the phone's ringer channel, so it sounds clean.
+- **SIP 2 (outgoing line)**: Settings → Outgoing line (SIP 2), PIN `000666`. A separate SIP account just for outgoing calls; incoming calls stay on SIP 1. Short extensions (6 digits or fewer) and transfers stay on SIP 1.
+
 ---
 
 ## 1. Create the Firebase database (one time, ~5 minutes)

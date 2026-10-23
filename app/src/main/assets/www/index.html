@@ -62,6 +62,8 @@ section[hidden]{display:none!important}
 
 /* keypad tab */
 .kp{display:flex;flex-direction:column;align-items:center;padding-block:20px 24px}
+#tab-keypad{min-height:100%;display:flex;flex-direction:column}
+#tab-keypad > .kp{flex:1;justify-content:center}
 .kp .num{width:100%;text-align:center;font-size:36px;font-weight:400;min-height:52px;letter-spacing:.02em;border:0;background:none;color:var(--fg);font-family:var(--font)}
 .kp .num:focus{outline:none}
 .kp .match{color:var(--blue);font-size:14px;min-height:20px;margin-bottom:6px}
@@ -169,6 +171,26 @@ body.native .webOnly, body:not(.native) .nativeOnly{display:none!important}
 .btn.small{display:inline-block;width:auto;padding:9px 14px;font-size:14px;margin:0}
 .cloc{font-size:15px;color:var(--call-muted);margin-top:6px;display:flex;align-items:center;gap:6px;justify-content:center;text-align:center}
 .cloc:empty{display:none}
+/* caller details card (area code, state, city, ZIP, local time) */
+.cinfo{margin-top:14px;width:100%;max-width:330px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:16px;
+  padding:10px 14px;display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;text-align:left}
+.cinfo div{min-width:0}
+.cinfo span{display:block;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--call-muted);opacity:.8}
+.cinfo b{display:block;font-size:15px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cinfo .wide{grid-column:1 / -1}
+.cinfo .clock b{font-size:17px;font-variant-numeric:tabular-nums}
+.call:not(.incoming) .bigav{width:108px;height:108px;font-size:40px}
+.call:not(.incoming) .cname{margin-top:14px}
+.cinfo{margin-bottom:18px}
+@media (max-height:720px){.call .bigav{width:112px;height:112px;font-size:42px}.call .cname{margin-top:14px;font-size:24px}.cinfo{margin-top:10px;padding:8px 12px;gap:6px 12px}}
+/* ringtone list */
+.ringlist{list-style:none;margin:6px 0 0;padding:0;background:var(--bg2);border-radius:12px;overflow:hidden}
+.ringlist button{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;background:none;border:0;border-bottom:1px solid var(--line);
+  color:var(--fg);font:15px var(--font);padding:13px 14px;text-align:left}
+.ringlist li:last-child button{border-bottom:0}
+.ringlist .tick{color:var(--blue);visibility:hidden}
+.ringlist button[aria-checked="true"] .tick{visibility:visible}
+.ringlist small{color:var(--muted);font-size:13px}
 .recrow{display:grid;gap:8px;padding:12px 0;border-bottom:1px solid var(--line)}
 .recrow:last-child{border-bottom:0}
 .recrow .rt{display:flex;justify-content:space-between;gap:10px;font-size:15px;font-weight:500}
@@ -359,6 +381,8 @@ body.native .webOnly, body:not(.native) .nativeOnly{display:none!important}
     <div class="group">
       <label class="switch nativeOnly">Record all calls<input type="checkbox" id="s_rec"></label>
       <button class="rowlink nativeOnly" id="openRecs" type="button"><span>Recordings</span><span class="rv"><span id="recCount"></span><svg class="chev" width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l6 6-6 6"/></svg></span></button>
+      <button class="rowlink nativeOnly" id="ringRow" type="button"><span>Ringtone</span><span class="rv"><span id="ringName">Phone ringtone</span><svg class="chev" width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l6 6-6 6"/></svg></span></button>
+      <label class="switch nativeOnly">Vibrate when ringing<input type="checkbox" id="ringVib" checked></label>
       <button class="rowlink" id="exportCsv" type="button"><span>Export call history (CSV)</span><span class="rv"><svg class="chev" width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l6 6-6 6"/></svg></span></button>
     </div>
     <p class="note nativeOnly" style="margin-bottom:0">In some US states (for example California, Florida, Illinois, Pennsylvania and Washington) everyone on the call must agree before it's recorded. Let callers know the call may be recorded.</p>
@@ -418,6 +442,33 @@ body.native .webOnly, body:not(.native) .nativeOnly{display:none!important}
     </form>
     </div>
 
+    <h2 class="sect nativeOnly">Outgoing line (SIP 2)</h2>
+    <div class="group nativeOnly"><button class="rowlink" id="sip2Lock" type="button"><span class="rl"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>SIP 2 settings</span><span class="rv"><span id="sip2LockV">PIN required</span><svg class="chev" width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l6 6-6 6"/></svg></span></button></div>
+    <div class="hstat nativeOnly" id="s2Stat">SIP 2 is off. Outgoing calls use SIP 1.</div>
+    <div id="sip2Box" hidden>
+    <form id="set2Form">
+      <div class="group">
+        <label class="switch">Use SIP 2 for outgoing calls<input type="checkbox" id="g_on"></label>
+      </div>
+      <div class="group">
+        <label class="field"><span>SIP username / extension</span><input id="g_user" placeholder="Username from your outgoing provider" autocomplete="off"></label>
+        <label class="field"><span>Password</span><input id="g_pass" type="password" autocomplete="new-password"></label>
+        <label class="field"><span>Auth username (optional)</span><input id="g_auth" placeholder="Only if different from username"></label>
+      </div>
+      <div class="group">
+        <label class="field"><span>SIP domain / server</span><input id="g_domain" placeholder="sip.outgoing-provider.com"></label>
+        <label class="field"><span>Transport</span><select id="g_transport"><option value="udp">UDP</option><option value="tcp">TCP</option><option value="tls">TLS</option></select></label>
+        <label class="field"><span>Port (optional)</span><input id="g_port" inputmode="numeric" placeholder="5060"></label>
+        <label class="field"><span>STUN server (optional)</span><input id="g_stun" placeholder="stun:stun.l.google.com:19302"></label>
+        <label class="field"><span>Number format for US numbers</span><select id="g_fmt"><option value="">Send as dialed</option><option value="1">Add 1 to 10-digit numbers</option><option value="+1">Add +1 to 10-digit numbers</option></select></label>
+      </div>
+      <div class="group"><label class="switch">Register with this server<input type="checkbox" id="g_reg" checked></label></div>
+      <p class="note" style="margin:10px 2px 0">Incoming calls keep coming in on SIP 1. Short extensions (6 digits or fewer) and transfers also stay on SIP 1. Turn off "Register" only if your outgoing provider says registration isn't needed (IP-based trunk).</p>
+      <button class="btn blue" type="submit">Save &amp; Activate</button>
+      <button class="btn danger" type="button" id="g_offBtn">Turn off SIP 2</button>
+    </form>
+    </div>
+
     <h2 class="sect">App</h2>
     <div class="group">
       <button class="rowlink" id="checkUpd" type="button"><span>Check for updates</span><span class="rv"><span id="verLbl"></span><svg class="chev" width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.5l6 6-6 6"/></svg></span></button>
@@ -467,6 +518,7 @@ body.native .webOnly, body:not(.native) .nativeOnly{display:none!important}
   <div class="cname" id="cName">—</div>
   <div class="cloc" id="cLoc"></div>
   <div class="cstate" id="cState"></div>
+  <div class="cinfo" id="cInfo" hidden></div>
   <button class="listen" id="bListen" hidden aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 14v-2a8 8 0 0116 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5" fill="currentColor"/><rect x="17" y="14" width="4" height="6" rx="1.5" fill="currentColor"/></svg><span id="bListenT">Hold audio: Off</span></button>
 
   <!-- incoming -->
@@ -501,10 +553,12 @@ body.native .webOnly, body:not(.native) .nativeOnly{display:none!important}
 <audio id="remote" autoplay playsinline></audio>
 <input type="file" id="photoIn" accept="image/*" hidden>
 <input type="file" id="holdIn" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg" hidden>
+<input type="file" id="ringIn" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg" hidden>
 <div class="toast" id="toast" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/jssip@3.10.0/dist/jssip.min.js"></script>
 <script src="firebase-config.js"></script>
+<script src="areacodes.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
@@ -553,6 +607,7 @@ function when(ts){
 /* ---------- tabs ---------- */
 function showTab(name){
   if(name !== "settings" && $("sipBox")){ $("sipBox").hidden = true; $("sipLockV").textContent = "PIN required"; }
+  if(name !== "settings" && $("sip2Box")){ $("sip2Box").hidden = true; $("sip2LockV").textContent = "PIN required"; }
   document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === name));
   ["calls","contacts","keypad","settings"].forEach(t => $("tab-"+t).hidden = t !== name);
   if(name === "calls") renderCalls();
@@ -606,7 +661,8 @@ $("addContact").onclick = () => editContact(-1);
 
 let pendingPhoto = null, photoMode = "";
 function openSheet(html){ $("sheet").innerHTML = '<div class="grab"></div>' + html; $("scrim").hidden = false; }
-function closeSheet(){ $("scrim").hidden = true; }
+let ringSheetOpen = false;
+function closeSheet(){ $("scrim").hidden = true; if(ringSheetOpen){ ringSheetOpen = false; try{ NativeSip.stopRingPreview(); }catch(e){} } }
 $("scrim").onclick = e => { if(e.target === $("scrim")) closeSheet(); };
 
 function editContact(i, preset){
@@ -781,6 +837,11 @@ window.__native = ev => {
       nativeReg = ev.state === "Ok" || ev.state === "Refreshing";
       if(user) setReg(m[0], m[1]);
       if(ev.state === "Failed" && user) toast("Registration failed: " + (ev.message || "check username, password, domain and transport"));
+    } else if(ev.type === "reg2"){
+      setReg2(ev.state, ev.message);
+    } else if(ev.type === "ringPicked"){
+      if(ev.uri){ setRing({ id:"system", uri:ev.uri, title:ev.title || "Phone ringtone" }); NativeSip.previewRingtone("system", ev.uri); }
+      if($("ringSheetList")) renderRingList();
     } else if(ev.type === "incoming"){
       if(!user || nativeSessions[ev.id]) return;
       bind(nativeSession(ev.id, ev.user || "Unknown", true, ev.display), true);
@@ -794,6 +855,7 @@ window.__native = ev => {
       render();
     } else if(ev.type === "sync"){
       if(ev.reg) window.__native({ type:"reg", state:ev.reg, message:"" });
+      if(ev.reg2) setReg2(ev.reg2, "");
       if(typeof ev.record === "boolean" && $("s_rec")) $("s_rec").checked = ev.record;
       (ev.calls || []).forEach(c => {
         if(!user) return;
@@ -1012,8 +1074,37 @@ function demoCall(num, incoming){ ac(); if(!incoming && active && active.isEstab
 $("demoOut").onclick = () => demoCall($("num").value.trim() || (contacts[0] && contacts[0].num) || "1002", false);
 $("demoIn").onclick = () => { toast("Demo call arriving in 3 seconds"); setTimeout(() => demoCall((contacts[0] && contacts[0].num) || "+1 844 312 7032", true), 3000); };
 
-function dial(n){
+/* SIP 2: outgoing line. Used for real phone numbers (7+ digits) when it's turned on. */
+function outNumber(n){
+  let d = String(n).replace(/[\s().-]/g, "");
+  const digits = d.replace(/\D/g, "");
+  if(cfg2.fmt && /^\d{10}$/.test(d)) d = cfg2.fmt + d;
+  else if(cfg2.fmt === "+1" && /^1\d{10}$/.test(d)) d = "+" + d;
+  else if(cfg2.fmt === "1" && /^\+1\d{10}$/.test(d)) d = d.slice(1);
+  return { target: "sip:" + d + "@" + cfg2.domain, digits };
+}
+function wantsOut(n){ return NATIVE && cfg2.on && cfg2.domain && !String(n).includes("@") && String(n).replace(/\D/g, "").length >= 7; }
+function dial(n, forceMain){
   n = String(n).trim(); if(!n) return;
+  if(!forceMain && wantsOut(n)){
+    if(!out2Ready){
+      openSheet('<h3>SIP 2 isn\'t connected</h3><p class="note" style="text-align:center;margin:6px 0 4px">' + esc(reg2Text()) + '</p>'
+        + (nativeReg ? '<button class="btn blue" id="n1Call">Call with SIP 1 instead</button>' : '') + '<button class="btn plain" id="n2Set">Open Settings</button><button class="btn plain" id="n2X">Cancel</button>');
+      if($("n1Call")) $("n1Call").onclick = () => { closeSheet(); dial(n, true); };
+      $("n2Set").onclick = () => { closeSheet(); showTab("settings"); };
+      $("n2X").onclick = closeSheet;
+      return;
+    }
+    ac();
+    if(active && active.isEstablished() && !onHold(active)) doHold(active);
+    const o = outNumber(n);
+    const id = NativeSip.callVia(o.target, "out");
+    if(!id){ toast("Couldn't place the call through SIP 2. Check the number and SIP 2 settings."); return; }
+    const s2 = nativeSession(id, n.replace(/@.*/, ""), false, "");
+    s2._via = "SIP 2";
+    bind(s2, false);
+    return;
+  }
   if(NATIVE ? !nativeReg : (!ua || !ua.isRegistered())){
     openSheet('<h3>Not registered</h3><p class="note" style="text-align:center;margin:6px 0 4px">To make real calls, register your SIP account in Settings. Until then, you can try a demo call.</p>'
       + '<button class="btn blue" id="nDemo">Start demo call</button><button class="btn plain" id="nSet">Open Settings</button>');
@@ -1036,7 +1127,7 @@ function dial(n){
 function bind(s, incoming){
   s._n = s.remote_identity.uri.user || "Unknown";
   s._dn = s.remote_identity.display_name || "";
-  s._in = incoming; s._start = 0; s._state = incoming ? "Incoming Call…" : "Calling…"; s._digits = "";
+  s._in = incoming; s._start = 0; s._state = incoming ? "Incoming Call…" : (s._via ? "Calling via " + s._via + "…" : "Calling…"); s._digits = "";
   calls.push(s); active = s;
   s.on("peerconnection", ev => attach(ev.peerconnection));
   if(s.connection) attach(s.connection);
@@ -1057,7 +1148,6 @@ function bind(s, incoming){
   };
   s.on("ended", end); s.on("failed", end);
   if(incoming && !s._native) startRing();
-  if(incoming && s._native && navigator.vibrate) navigator.vibrate([600,400,600]);
   resetCtrls(); $("call").hidden = false; render(); startTick();
 }
 function addLog(e){
@@ -1086,6 +1176,7 @@ function render(){
   $("cName").textContent = displayName(s._n, s._dn);
   const where = locate(s._n);
   $("cLoc").innerHTML = where ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0119 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>' + esc(where) + (bargeState === "joined" ? " · Admin on call" : "") : (bargeState === "joined" ? "Admin on call" : "");
+  renderCallerInfo(s._n);
   const ringing = s._in && !s._start && !s.isEstablished();
   $("call").classList.toggle("incoming", ringing);
   $("cBg").hidden = !(ringing && c && c.photo);
@@ -1103,7 +1194,7 @@ function render(){
   $("bListen").setAttribute("aria-pressed", !!hold.listen);
   $("bListenT").textContent = "Hold audio: " + (hold.listen ? "On" : "Off") + (hold.listen ? " · you hear it" : " · caller only");
 }
-function startTick(){ stopTick(); tick = setInterval(() => { if(active && active._start && !(onHold(active))) $("cState").textContent = fmt(Math.round((Date.now()-active._start)/1000)); }, 1000); }
+function startTick(){ stopTick(); tick = setInterval(() => { updCallerClock(); if(active && active._start && !(onHold(active))) $("cState").textContent = fmt(Math.round((Date.now()-active._start)/1000)); }, 1000); }
 function stopTick(){ clearInterval(tick); tick = null; }
 function resetCtrls(){ showPad(false); $("callMenu").hidden = true; $("bSpk").setAttribute("aria-pressed","false"); $("remote").volume = .7; }
 function showPad(on){ $("cpad").hidden = !on; $("ctrls").hidden = on; $("cDigits").hidden = !on; $("bHideKeys").hidden = !on; }
@@ -1148,12 +1239,26 @@ $("heldBar").onclick = () => { if(!calls.length){ $("heldBar").hidden = true; re
 
 /* ringtone */
 let ringInt = null;
-function startRing(){ stopRing(); const r = () => { beep([440,480],1000,.12); if(navigator.vibrate) navigator.vibrate([700,300,700]); }; r(); ringInt = setInterval(r, 3000); }
-function stopRing(){ clearInterval(ringInt); ringInt = null; if(navigator.vibrate) navigator.vibrate(0); }
+let ringAudio = null;
+function startRing(){
+  stopRing();
+  const id = (ringCfg && ringCfg.id) || "";
+  if(id.startsWith("builtin:")){
+    try{ ringAudio = new Audio("../ringtones/" + id.slice(8) + ".ogg"); ringAudio.loop = true; ringAudio.play().catch(() => { ringAudio = null; startBeepRing(); }); if(navigator.vibrate) navigator.vibrate([700,300,700]); return; }catch(e){ ringAudio = null; }
+  }
+  startBeepRing();
+}
+function startBeepRing(){ const r = () => { beep([440,480],1000,.12); if(navigator.vibrate) navigator.vibrate([700,300,700]); }; r(); ringInt = setInterval(r, 3000); }
+function stopRing(){ clearInterval(ringInt); ringInt = null; if(ringAudio){ try{ ringAudio.pause(); }catch(e){} ringAudio = null; } if(navigator.vibrate) navigator.vibrate(0); }
 
 /* ---------- caller location (US area codes) ---------- */
 let AREA = null;
 function loadAreaCodes(){
+  if(window.MACS_AREA){
+    const m = {};
+    for(const k in window.MACS_AREA){ const v = window.MACS_AREA[k]; m[k] = v[0] === "TOLLFREE" ? ["Toll-free number", ""] : [v[0], v[1]]; }
+    AREA = m; return;
+  }
   try{ const c = localStorage.getItem("macs_areacodes"); if(c){ AREA = JSON.parse(c); return; } }catch(e){}
   fetch("https://cdn.jsdelivr.net/npm/areacodes@0.2.1/lib/data.json").then(r => r.json()).then(d => {
     const m = {};
@@ -1175,6 +1280,145 @@ function locate(num){
   const a = AREA[d.slice(0, 3)]; if(!a) return "";
   return a[1] ? (a[0] ? a[0] + ", " + a[1] : a[1]) : a[0];
 }
+
+/* caller details: area code, state, city, ZIP and the caller's local time */
+function areaOf(num){
+  const A = window.MACS_AREA; if(!A) return null;
+  let d = String(num || "").replace(/\D/g, "");
+  if(d.length === 11 && d[0] === "1") d = d.slice(1);
+  if(d.length !== 10) return null;
+  const code = d.slice(0, 3), v = A[code]; if(!v) return { code };
+  if(v[0] === "TOLLFREE") return { code, tollfree:true };
+  return { code, city:v[0], st:v[1], state:(window.MACS_STATES || {})[v[1]] || v[1], zip:v[2], tz:v[3] };
+}
+function localTime(tz){
+  try{ return new Intl.DateTimeFormat("en-US", { timeZone:tz, weekday:"short", hour:"numeric", minute:"2-digit", timeZoneName:"short" }).format(new Date()); }catch(e){ return ""; }
+}
+let callerTz = "";
+function renderCallerInfo(num){
+  const box = $("cInfo"), a = areaOf(num);
+  if(!a){ box.hidden = true; box.innerHTML = ""; callerTz = ""; return; }
+  const cell = (label, val, cls) => '<div' + (cls ? ' class="' + cls + '"' : '') + '><span>' + label + '</span><b>' + esc(val) + '</b></div>';
+  let h;
+  if(a.tollfree) h = cell("Area code", a.code) + cell("Type", "Toll-free");
+  else if(!a.st) h = cell("Area code", a.code) + cell("Location", "Unknown");
+  else h = cell("Area code", a.code) + cell("State", a.state + " (" + a.st + ")")
+    + cell("City", a.city) + cell(a.zip ? "Main ZIP" : "Country", a.zip || "Canada")
+    + cell("Local time there", localTime(a.tz), "wide clock");
+  callerTz = a.tz || "";
+  const key = a.code + "|" + (active && active._id || "");
+  if(box.dataset.k !== key || box.hidden){ box.innerHTML = h; box.dataset.k = key; }
+  box.hidden = false;
+}
+function updCallerClock(){ if(!callerTz || $("cInfo").hidden) return; const b = $("cInfo").querySelector(".clock b"); if(b) b.textContent = localTime(callerTz); }
+
+/* ---------- ringtone (per profile) ---------- */
+const RINGS = [["default","Phone ringtone"],["builtin:classic","Classic phone"],["builtin:office","Office desk"],["builtin:oldbell","Old bell"],
+  ["builtin:marimba","Marimba"],["builtin:chime","Soft chime"],["builtin:rise","Rise"],["builtin:digital","Digital"]];
+let ringCfg = { id:"default", vibrate:true };
+function ringTitle(c){ if(c.id === "system") return c.title || "From phone"; if(c.id === "custom") return c.title || "My audio file"; const r = RINGS.find(x => x[0] === c.id); return r ? r[1] : "Phone ringtone"; }
+function pushRing(){ if(NATIVE) try{ NativeSip.setRingtone(JSON.stringify({ id:ringCfg.id, uri:ringCfg.uri || "", vibrate:ringCfg.vibrate !== false })); }catch(e){} }
+function setRing(c){ ringCfg = Object.assign({}, ringCfg, c); if(c.id !== "system") delete ringCfg.uri; store.set("kdn_ring", ringCfg); pushRing(); fillRing(); }
+function fillRing(){ if($("ringName")) $("ringName").textContent = ringTitle(ringCfg); if($("ringVib")) $("ringVib").checked = ringCfg.vibrate !== false; }
+function renderRingList(){
+  const ul = $("ringSheetList"); if(!ul) return;
+  const items = RINGS.slice();
+  if(ringCfg.id === "system") items.push(["system", ringCfg.title || "From phone"]);
+  if(ringCfg.id === "custom" || ringCfg.customTitle) items.push(["custom", ringCfg.customTitle || "My audio file"]);
+  ul.innerHTML = items.map(([id, t]) => '<li><button type="button" role="radio" data-r="' + esc(id) + '" aria-checked="' + (ringCfg.id === id) + '"><span>' + esc(t) + '</span>'
+    + '<svg class="tick" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button></li>').join("");
+  ul.querySelectorAll("button").forEach(b => b.onclick = () => {
+    const id = b.dataset.r;
+    if(id === "custom") setRing({ id:"custom", title:ringCfg.customTitle || "My audio file" });
+    else if(id === "system") setRing({ id:"system", uri:ringCfg.uri, title:ringCfg.title });
+    else setRing({ id });
+    try{ NativeSip.previewRingtone(id, ringCfg.uri || ""); }catch(e){}
+    renderRingList();
+  });
+}
+$("ringRow").onclick = () => {
+  openSheet('<h3>Ringtone</h3><p class="note" style="text-align:center;margin:2px 0 6px">Tap a ringtone to hear it. It plays at your phone\'s ring volume.</p>'
+    + '<ul class="ringlist" id="ringSheetList"></ul>'
+    + '<div class="btnrow"><button class="btn plain" id="ringPhone" type="button">From phone…</button><button class="btn plain" id="ringFile" type="button">Audio file…</button></div>'
+    + '<button class="btn blue" id="ringDone" type="button">Done</button>');
+  renderRingList();
+  ringSheetOpen = true;
+  $("ringDone").onclick = closeSheet;
+  $("ringPhone").onclick = () => { try{ NativeSip.stopRingPreview(); NativeSip.pickSystemRingtone(ringCfg.id === "system" ? (ringCfg.uri || "") : ""); }catch(e){} };
+  $("ringFile").onclick = () => $("ringIn").click();
+};
+$("ringIn").onchange = async () => {
+  const f = $("ringIn").files[0]; $("ringIn").value = "";
+  if(!f) return;
+  if(f.size > 8 * 1024 * 1024){ toast("That file is too big. Pick one under 8 MB."); return; }
+  try{
+    const b64 = bytesToB64(new Uint8Array(await f.arrayBuffer()));
+    if(!NativeSip.saveCustomRingtone(b64)){ toast("Couldn't save that file."); return; }
+    const title = f.name.replace(/\.[^.]+$/, "").slice(0, 40) || "My audio file";
+    ringCfg.customTitle = title;
+    setRing({ id:"custom", title });
+    NativeSip.previewRingtone("custom", "");
+    renderRingList();
+  }catch(e){ toast("Couldn't read that file."); }
+};
+$("ringVib").onchange = () => setRing({ vibrate:$("ringVib").checked });
+
+/* ---------- SIP 2 (outgoing line, PIN protected) ---------- */
+const SIP2_PIN = "000666";
+let cfg2 = {}, out2State = "None", out2Ready = false;
+function reg2Text(){
+  if(!cfg2.on) return "SIP 2 is off. Outgoing calls use SIP 1.";
+  return ({ Ok:"SIP 2 connected (" + cfg2.user + "@" + cfg2.domain + ") — outgoing calls use SIP 2.",
+    Refreshing:"SIP 2 connected (" + cfg2.user + "@" + cfg2.domain + ") — outgoing calls use SIP 2.",
+    Ready:"SIP 2 ready (no registration) — outgoing calls use SIP 2.",
+    Progress:"SIP 2 connecting…", Failed:"SIP 2 couldn't connect" + (out2Msg ? ": " + out2Msg : "") + ". Check the SIP 2 settings.",
+    Cleared:"SIP 2 is off. Outgoing calls use SIP 1." })[out2State] || "SIP 2 isn't connected yet.";
+}
+let out2Msg = "";
+function setReg2(state, msg){
+  out2State = state || "None"; out2Msg = msg || "";
+  out2Ready = cfg2.on && /^(Ok|Refreshing|Ready)$/.test(out2State);
+  const st = $("s2Stat"); if(!st) return;
+  st.textContent = reg2Text();
+  st.className = "hstat nativeOnly" + (out2Ready ? " ok" : (out2State === "Failed" && cfg2.on ? " err" : ""));
+  if(state === "Failed" && cfg2.on && user) toast("SIP 2: " + (msg || "couldn't connect"));
+}
+function registerOut(){
+  if(!NATIVE) return;
+  if(!cfg2.on || !cfg2.user || !cfg2.domain){ try{ NativeSip.unregisterOut(); }catch(e){} setReg2("Cleared", ""); return; }
+  setReg2("Progress", "");
+  NativeSip.registerOut(JSON.stringify({ user:cfg2.user, pass:cfg2.pass, auth:cfg2.auth, domain:cfg2.domain, transport:cfg2.transport || "udp",
+    port:cfg2.port || "", stun:cfg2.stun || "", register:cfg2.reg !== false, displayName: profileName() }));
+}
+function fillForm2(){
+  $("g_on").checked = !!cfg2.on; $("g_user").value = cfg2.user || ""; $("g_pass").value = cfg2.pass || ""; $("g_auth").value = cfg2.auth || "";
+  $("g_domain").value = cfg2.domain || ""; $("g_transport").value = cfg2.transport || "udp"; $("g_port").value = cfg2.port || "";
+  $("g_stun").value = cfg2.stun || ""; $("g_fmt").value = cfg2.fmt || ""; $("g_reg").checked = cfg2.reg !== false;
+}
+$("set2Form").onsubmit = e => {
+  e.preventDefault();
+  const c = { on:$("g_on").checked, user:$("g_user").value.trim(), pass:$("g_pass").value, auth:$("g_auth").value.trim(),
+    domain:$("g_domain").value.trim(), transport:$("g_transport").value, port:$("g_port").value.trim(), stun:$("g_stun").value.trim(),
+    fmt:$("g_fmt").value, reg:$("g_reg").checked };
+  if(c.on && (!c.user || !c.domain)){ toast("Enter the SIP 2 username and domain."); return; }
+  if(c.on && c.reg && !c.pass){ toast("Enter the SIP 2 password."); return; }
+  cfg2 = c; store.set("kdn_sip2_cfg", cfg2); registerOut();
+  toast(c.on ? "SIP 2 saved — connecting…" : "SIP 2 saved (turned off)");
+};
+$("g_offBtn").onclick = () => { cfg2.on = false; $("g_on").checked = false; store.set("kdn_sip2_cfg", cfg2); registerOut(); toast("SIP 2 turned off. Outgoing calls use SIP 1."); };
+$("sip2Lock").onclick = () => {
+  if(!$("sip2Box").hidden){ $("sip2Box").hidden = true; $("sip2LockV").textContent = "PIN required"; return; }
+  openSheet('<h3>Enter PIN</h3><p class="note" style="text-align:center;margin:4px 0 14px">SIP 2 settings are protected.</p>'
+    + '<input class="pinbox" id="pin2In" type="password" inputmode="numeric" maxlength="6" autocomplete="off" aria-label="PIN">'
+    + '<p class="lerr2" id="pin2Err"></p><button class="btn blue" id="pin2Go">Unlock</button><button class="btn plain" id="pin2X">Cancel</button>');
+  const go = () => {
+    if($("pin2In").value === SIP2_PIN){ closeSheet(); $("sip2Box").hidden = false; $("sip2LockV").textContent = "Unlocked"; fillForm2(); $("sip2Box").scrollIntoView({ behavior:"smooth", block:"start" }); }
+    else { $("pin2Err").textContent = "Wrong PIN. Try again."; $("pin2In").value = ""; }
+  };
+  $("pin2Go").onclick = go; $("pin2X").onclick = closeSheet;
+  $("pin2In").onkeydown = e => { if(e.key === "Enter") go(); };
+  setTimeout(() => $("pin2In").focus(), 100);
+};
 
 /* ---------- online sync (Firebase) ---------- */
 let db = null, bargeState = "";
@@ -1559,6 +1803,8 @@ function enterApp(u){
   user = u;
   try{ localStorage.setItem("macs_session", u); }catch(e){}
   cfg = store.get("kdn_sip_cfg", {}); log = store.get("kdn_sip_log", []); contacts = store.get("kdn_contacts", []);
+  cfg2 = store.get("kdn_sip2_cfg", {}); ringCfg = store.get("kdn_ring", { id:"default", vibrate:true });
+  pushRing(); fillRing(); setReg2(cfg2.on ? "Progress" : "Cleared", ""); if(cfg2.on) registerOut();
   renderProfile();
   fillForm(); fillHold(); renderCalls(); renderContacts(); updCoStat(); updRecCount();
   if(NATIVE) setTimeout(() => NativeSip.ready(), 0);
@@ -1576,7 +1822,8 @@ function signOut(){
   markOffline(); unlinkLive();
   calls.slice().forEach(s => { try{ s.terminate(); }catch(e){} });
   if(ua){ try{ ua.stop(); }catch(e){} ua = null; }
-  if(NATIVE){ try{ NativeSip.unregister(); }catch(e){} nativeReg = false; }
+  if(NATIVE){ try{ NativeSip.unregister(); }catch(e){} try{ NativeSip.unregisterOut(); }catch(e){} nativeReg = false; }
+  cfg2 = {}; out2Ready = false;
   setReg("off","Not connected");
   try{ localStorage.removeItem("macs_session"); }catch(e){}
   stopPreview(); user = null; cfg = {}; log = []; contacts = []; holdBuf = null;
