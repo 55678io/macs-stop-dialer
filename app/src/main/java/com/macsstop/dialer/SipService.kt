@@ -159,4 +159,7 @@ class SipService : Service() {
             base().addAction(android.R.drawable.sym_call_missed, "Decline", decline)
                 .addAction(android.R.drawable.sym_call_incoming, "Answer", answer).build()
         }
-        try { nm.notify(ID_INCOMING, n) } catch (e: Exception) { Log.e("MacsSip", "incoming notification", e) }
+        try { nm.notify(ID_INCOMING, n) } catch (e: Exception) { Log.e("MacsSip", "incoming notification", e) }        // Bring the app forward right away when allowed (screen on / app recently used).
+        try { startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)) } catch (e: Exception) {}
+    }
+}
