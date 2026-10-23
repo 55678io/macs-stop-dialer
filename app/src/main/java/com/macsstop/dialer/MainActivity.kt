@@ -54,15 +54,9 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (Build.VERSION.SDK_INT >= 27) {
-            setShowWhenLocked(true)
-            setTurnScreenOn(true)
-        } else {
-            @Suppress("DEPRECATION")
-            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
-        }
-
         SipManager.init(this)
+        updateLockScreen()
+        SipManager.onCallsChangedUi = callsUi
 
         web = WebView(this)
         setContentView(web)
@@ -116,11 +110,71 @@ class MainActivity : AppCompatActivity() {
         })
 
         requestNeededPermissions()
+        handleCallIntent(intent)
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleCallIntent(intent)
+    }
+
+    /** "Answer" on the incoming-call notification (also from the lock screen). */
+    private fun handleCallIntent(i: Intent?) {
+        if (i?.action != SipService.ACTION_ANSWER) return
+        val id = i.getStringExtra(SipService.EXTRA_CALL) ?: return
+        i.action = null
+        SipManager.answer(id)
+        SipManager.ready()
+    }
+
+    /** Android 14+: full-screen call alerts need this permission; without it the lock screen only shows a small notification. */
+    private fun canFullScreen(): Boolean = try {
+        if (Build.VERSION.SDK_INT >= 34) getSystemService(android.app.NotificationManager::class.java).canUseFullScreenIntent() else true
+    } catch (e: Exception) { true }
+
+    private fun notificationsOn(): Boolean = try {
+        androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()
+    } catch (e: Exception) { true }
 
     override fun onResume() {
         super.onResume()
         SipManager.ready()
+        SipService.clearMissed(this)
+    }
+
+    private val callsUi: () -> Unit = { runOnUiThread { updateLockScreen() } }
+
+    override fun onDestroy() {
+        if (SipManager.onCallsChangedUi === callsUi) SipManager.onCallsChangedUi = null
+        super.onDestroy()
+    }
+
+    /**
+     * The app shows on top of the lock screen only while there is a call (so a call can be answered
+     * without unlocking). With no call, the phone has to be unlocked to see history, contacts and settings.
+     */
+    private fun updateLockScreen() {
+        val onCall = SipManager.hasCalls()
+        if (Build.VERSION.SDK_INT >= 27) {
+            setShowWhenLocked(onCall)
+            setTurnScreenOn(onCall)
+        } else {
+            @Suppress("DEPRECATION")
+            val f = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            if (onCall) window.addFlags(f) else window.clearFlags(f)
+        }
+        if (onCall) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    /** Volume buttons silence the ringtone (the call keeps ringing on screen), like a normal phone. */
+    override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent?): Boolean {
+        if ((keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP) && SipManager.hasRingingCall()) {
+            RingtonePlayer.stop()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     private fun requestNeededPermissions() {
@@ -220,5 +274,24 @@ class MainActivity : AppCompatActivity() {
         @JavascriptInterface fun saveHoldWav(b64: String, loop: Boolean) = SipManager.saveHoldWav(b64, loop)
         @JavascriptInterface fun clearHold() = SipManager.clearHold()
         @JavascriptInterface fun ready() { SipManager.ready() }
+        @JavascriptInterface fun lockScreenStatus(): String = org.json.JSONObject()
+            .put("notifications", notificationsOn()).put("fullScreen", canFullScreen()).toString()
+        @JavascriptInterface fun openNotificationSettings() {
+            runOnUiThread {
+                try {
+                    startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+                } catch (e: Exception) {
+                    try { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) } catch (e2: Exception) {}
+                }
+            }
+        }
+        @JavascriptInterface fun openFullScreenSettings() {
+            runOnUiThread {
+                try {
+                    if (Build.VERSION.SDK_INT >= 34) startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName")))
+                    else startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+                } catch (e: Exception) {}
+            }
+        }
     }
 }

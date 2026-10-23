@@ -35,6 +35,8 @@ object RingtonePlayer {
 
     private lateinit var appCtx: Context
     private var player: MediaPlayer? = null
+    private var tone: android.media.Ringtone? = null
+    private var toneLoop: Runnable? = null
     private var vibrating = false
     private var previewStop: Runnable? = null
 
@@ -117,27 +119,55 @@ object RingtonePlayer {
         previewStop = null
     }
 
+    private fun attrs(preview: Boolean): AudioAttributes = AudioAttributes.Builder()
+        .setUsage(if (preview) AudioAttributes.USAGE_MEDIA else AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .build()
+
     private fun play(id: String, uri: String, loop: Boolean, preview: Boolean) {
+        // The phone's own ringtones play through Android's Ringtone player, which has the
+        // permission to read them (a plain media player can be refused on newer Android).
+        if (id == "default" || id == "system") {
+            val u: Uri? = if (id == "system" && uri.isNotEmpty()) Uri.parse(uri)
+                else RingtoneManager.getActualDefaultRingtoneUri(appCtx, RingtoneManager.TYPE_RINGTONE)
+                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            if (u != null && playTone(u, loop, preview)) return
+            playFile("builtin:classic", loop, preview)
+            return
+        }
+        playFile(id, loop, preview)
+    }
+
+    private fun playTone(u: Uri, loop: Boolean, preview: Boolean): Boolean {
+        return try {
+            val r = RingtoneManager.getRingtone(appCtx, u) ?: return false
+            r.audioAttributes = attrs(preview)
+            if (Build.VERSION.SDK_INT >= 28) r.isLooping = loop
+            r.play()
+            tone = r
+            if (loop && Build.VERSION.SDK_INT < 28) {
+                val t = object : Runnable {
+                    override fun run() {
+                        if (tone !== r) return
+                        try { if (!r.isPlaying) r.play() } catch (e: Exception) {}
+                        main.postDelayed(this, 1000)
+                    }
+                }
+                toneLoop = t
+                main.postDelayed(t, 1000)
+            }
+            true
+        } catch (e: Exception) { Log.w(TAG, "ringtone $u", e); false }
+    }
+
+    private fun playFile(id: String, loop: Boolean, preview: Boolean) {
         val mp = MediaPlayer()
         try {
-            mp.setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(if (preview) AudioAttributes.USAGE_MEDIA else AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-            )
-            when {
-                id.startsWith("builtin:") -> {
-                    val name = id.removePrefix("builtin:").replace(Regex("[^a-z0-9_]"), "")
-                    mp.setDataSource(builtinFile(name).absolutePath)
-                }
-                id == "custom" && customFile().exists() -> mp.setDataSource(customFile().absolutePath)
-                id == "system" && uri.isNotEmpty() -> mp.setDataSource(appCtx, Uri.parse(uri))
-                else -> {
-                    val def = RingtoneManager.getActualDefaultRingtoneUri(appCtx, RingtoneManager.TYPE_RINGTONE)
-                        ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-                    mp.setDataSource(appCtx, def)
-                }
+            mp.setAudioAttributes(attrs(preview))
+            if (id == "custom" && customFile().exists()) mp.setDataSource(customFile().absolutePath)
+            else {
+                val name = id.removePrefix("builtin:").replace(Regex("[^a-z0-9_]"), "").ifEmpty { "classic" }
+                mp.setDataSource(builtinFile(name).absolutePath)
             }
             mp.isLooping = loop
             mp.prepare()
@@ -147,7 +177,7 @@ object RingtonePlayer {
             Log.w(TAG, "play $id", e)
             try { mp.release() } catch (e2: Exception) {}
             // the chosen file is missing or broken: fall back to the app's classic ring
-            if (!id.startsWith("builtin:")) play("builtin:classic", "", loop, preview)
+            if (id != "builtin:classic") playFile("builtin:classic", loop, preview)
         }
     }
 
@@ -176,6 +206,10 @@ object RingtonePlayer {
         try { player?.stop() } catch (e: Exception) {}
         try { player?.release() } catch (e: Exception) {}
         player = null
+        toneLoop?.let { main.removeCallbacks(it) }
+        toneLoop = null
+        try { tone?.stop() } catch (e: Exception) {}
+        tone = null
         if (vibrating) { try { vibrator()?.cancel() } catch (e: Exception) {}; vibrating = false }
     }
 }

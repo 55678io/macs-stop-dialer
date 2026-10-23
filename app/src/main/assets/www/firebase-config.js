@@ -14,4 +14,4 @@ window.FIREBASE_CONFIG = {
 };
 
 // GitHub repository the app checks for updates (owner/repo).
-window.UPDATE_REPO = "55678io/macs-dailer-android";
+window.UPDATE_REPO = "55678io/macs-stop-dialer";

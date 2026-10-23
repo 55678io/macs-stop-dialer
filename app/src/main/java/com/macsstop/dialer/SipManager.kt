@@ -41,8 +41,15 @@ object SipManager {
 
     /** Receives JSON events for the web UI. */
     var listener: ((String) -> Unit)? = null
-    var onIncoming: ((String) -> Unit)? = null
+    /** (call id, caller name or number) */
+    var onIncoming: ((String, String) -> Unit)? = null
     var onCallsChanged: (() -> Unit)? = null
+    /** For the screen: lock-screen visibility follows whether there is a call. */
+    var onCallsChangedUi: (() -> Unit)? = null
+    /** (caller) — an incoming call that rang out without being answered */
+    var onMissed: ((String) -> Unit)? = null
+    private var speakerOn = false
+    private var proximity: android.os.PowerManager.WakeLock? = null
     var onRegChanged: ((String) -> Unit)? = null
 
     private var regState = "None"
@@ -103,7 +110,26 @@ object SipManager {
         c.addListener(coreListener)
         c.start()
         core = c
+        restore()
     }
+
+    // The last SIP 1 / SIP 2 login is kept on the phone, so if Android closes the app in the
+    // background the phone signs back in by itself and keeps receiving calls.
+    private fun saved() = appCtx.getSharedPreferences("sip", Context.MODE_PRIVATE)
+    private var lastMain = ""
+    private var lastOut = ""
+
+    private fun restore() {
+        val m = saved().getString("reg1", "") ?: ""
+        val o = saved().getString("reg2", "") ?: ""
+        if (m.isNotEmpty()) register(m)
+        if (o.isNotEmpty()) registerOut(o)
+    }
+
+    /** The login without the one-off "force" flag (set when the agent taps Save & Register). */
+    private fun loginKey(json: String): Pair<String, Boolean> = try {
+        val o = JSONObject(json); val force = o.optBoolean("force", false); o.remove("force"); Pair(o.toString(), force)
+    } catch (e: Exception) { Pair(json, false) }
 
     // ---------------------------------------------------------------- listener
 
@@ -131,7 +157,7 @@ object SipManager {
 
             when (st) {
                 Call.State.IncomingReceived -> {
-                    val busy = calls.keys.any { it != id }
+                    val busy = calls.any { (k, c) -> k != id && c.state != Call.State.End && c.state != Call.State.Released && c.state != Call.State.Error }
                     calls[id] = call
                     incomingIds.add(id)
                     if (busy) RingtonePlayer.startWaiting() else RingtonePlayer.start()
@@ -140,7 +166,7 @@ object SipManager {
                             .put("user", call.remoteAddress.username ?: "")
                             .put("display", call.remoteAddress.displayName ?: "")
                     )
-                    onIncoming?.invoke(displayOf(call))
+                    onIncoming?.invoke(id, displayOf(call))
                 }
                 Call.State.OutgoingInit -> calls[id] = call
                 Call.State.Connected -> incomingIds.remove(id)
@@ -151,6 +177,10 @@ object SipManager {
                     }
                 }
                 Call.State.End, Call.State.Error, Call.State.Released -> {
+                    if (st == Call.State.End && id in incomingIds) {
+                        val missed = try { call.callLog.status == Call.Status.Missed } catch (e: Exception) { false }
+                        if (missed) onMissed?.invoke(displayOf(call))
+                    }
                     if (holdCallId == id) stopHoldInternal(id, call, restoreMic = false)
                     if (bargeOriginalId == id) endBarge()
                     calls.remove(id)
@@ -167,7 +197,10 @@ object SipManager {
             }
             emit(ev)
             if (!hasRingingCall()) RingtonePlayer.stop()
+            if (calls.isEmpty()) speakerOn = false
+            updateProximity()
             onCallsChanged?.invoke()
+            onCallsChangedUi?.invoke()
         }
     }
 
@@ -175,6 +208,29 @@ object SipManager {
     private fun displayOf(call: Call): String {
         val a = call.remoteAddress
         return a.displayName?.takeIf { it.isNotBlank() } ?: a.username ?: "Unknown caller"
+    }
+
+    fun hasCalls(): Boolean = calls.isNotEmpty()
+
+    /** During a connected call (earpiece) the screen turns off near the ear, so the cheek can't press buttons. */
+    private fun updateProximity() {
+        val want = !speakerOn && calls.values.any {
+            it.state == Call.State.StreamsRunning || it.state == Call.State.Connected || it.state == Call.State.OutgoingRinging ||
+                it.state == Call.State.OutgoingProgress || it.state == Call.State.OutgoingEarlyMedia || it.state == Call.State.Paused
+        }
+        try {
+            if (want) {
+                if (proximity == null) {
+                    val pm = appCtx.getSystemService(android.os.PowerManager::class.java)
+                    if (pm.isWakeLockLevelSupported(android.os.PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) {
+                        proximity = pm.newWakeLock(android.os.PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "macs:proximity")
+                    }
+                }
+                proximity?.let { if (!it.isHeld) it.acquire(4 * 60 * 60 * 1000L) }
+            } else {
+                proximity?.let { if (it.isHeld) it.release(android.os.PowerManager.RELEASE_FLAG_WAIT_FOR_NO_PROXIMITY) }
+            }
+        } catch (e: Exception) { Log.w(TAG, "proximity", e) }
     }
 
     fun hasRingingCall(): Boolean = calls.any { (id, c) -> id in incomingIds && c.state == Call.State.IncomingReceived }
@@ -269,6 +325,14 @@ object SipManager {
 
     fun register(json: String) = onMain(Unit) {
         val c = core ?: return@onMain
+        val (key, force) = loginKey(json)
+        saved().edit().putString("reg1", key).apply()
+        // same login already signed in (or signing in): don't drop and re-add it
+        if (!force && key == lastMain && mainAccount != null && regState in setOf("Ok", "Refreshing", "Progress")) {
+            emit(JSONObject().put("type", "reg").put("state", regState).put("message", ""))
+            return@onMain
+        }
+        lastMain = key
         regState = "Progress"
         emit(JSONObject().put("type", "reg").put("state", "Progress").put("message", ""))
         onRegChanged?.invoke("Progress")
@@ -286,6 +350,8 @@ object SipManager {
 
     fun unregister() = onMain(Unit) {
         val c = core ?: return@onMain
+        saved().edit().remove("reg1").apply()
+        lastMain = ""
         val old = mainAccount; val oldAuth = mainAuth
         mainAccount = null; mainAuth = null
         val gen = ++mainGen
@@ -301,6 +367,13 @@ object SipManager {
     fun registerOut(json: String) = onMain(Unit) {
         val c = core ?: return@onMain
         val o = try { JSONObject(json) } catch (e: Exception) { JSONObject() }
+        val (key, force) = loginKey(json)
+        saved().edit().putString("reg2", key).apply()
+        if (!force && key == lastOut && outAccount != null && outState in setOf("Ok", "Refreshing", "Progress", "Ready")) {
+            emit(JSONObject().put("type", "reg2").put("state", outState).put("message", ""))
+            return@onMain
+        }
+        lastOut = key
         outRegister = o.optBoolean("register", true)
         outState = "Progress"
         emit(JSONObject().put("type", "reg2").put("state", "Progress").put("message", ""))
@@ -324,6 +397,8 @@ object SipManager {
 
     fun unregisterOut() = onMain(Unit) {
         val c = core ?: return@onMain
+        saved().edit().remove("reg2").apply()
+        lastOut = ""
         val old = outAccount; val oldAuth = outAuth
         outAccount = null; outAuth = null; outDomain = ""
         val gen = ++outGen
@@ -549,6 +624,8 @@ object SipManager {
     }
 
     fun setSpeaker(on: Boolean) = onMain(Unit) {
+        speakerOn = on
+        updateProximity()
         val c = core ?: return@onMain
         val call = c.currentCall ?: calls.values.lastOrNull() ?: return@onMain
         val want = if (on) AudioDevice.Type.Speaker else AudioDevice.Type.Earpiece
